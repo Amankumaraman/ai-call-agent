@@ -4,3 +4,4 @@ groq
 python-dotenv
 twilio
 pandas
+python-multipart

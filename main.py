@@ -183,70 +183,80 @@ def ui():
 @app.post("/voice")
 async def voice(request: Request):
 
-    form = await request.form()
+    try:
 
-    user_input = form.get("SpeechResult")
+        form = await request.form()
 
-    phone = form.get("From")
+        user_input = form.get("SpeechResult")
 
-    print("USER:", user_input)
+        phone = form.get("From")
 
-    if not user_input:
+        print("USER:", user_input)
 
-        ai_text = """
+        if not user_input:
+
+            ai_text = """
 Hello, this is an AI assistant helping businesses automate customer support,
 WhatsApp replies and appointment booking.
 
 What type of business do you run?
 """
 
-        interested = False
+            interested = False
 
-    else:
+        else:
 
-        ai_text, interested = generate_reply(user_input)
+            ai_text, interested = generate_reply(user_input)
 
-    print("AI:", ai_text)
+        print("AI:", ai_text)
 
-    save_log(user_input, ai_text)
+        response = VoiceResponse()
 
-    if interested:
+        gather = Gather(
 
-        save_lead(phone, "YES")
+            input="speech",
 
-    response = VoiceResponse()
+            action="/voice",
 
-    gather = Gather(
+            method="POST",
 
-        input="speech",
+            speechTimeout="auto",
 
-        action="/voice",
+            timeout=5
 
-        method="POST",
+        )
 
-        speechTimeout="auto",
+        gather.say(
 
-        timeout=5
+            ai_text,
 
-    )
+            voice="Polly.Joanna-Neural"
 
-    gather.say(
+        )
 
-        ai_text,
+        response.append(gather)
 
-        voice="Polly.Joanna-Neural"
+        return Response(
 
-    )
+            content=str(response),
 
-    response.append(gather)
+            media_type="application/xml"
+        )
 
-    return Response(
+    except Exception as e:
 
-        content=str(response),
+        print("ERROR:", str(e))
 
-        media_type="application/xml"
-    )
+        response = VoiceResponse()
 
+        response.say("Sorry, something went wrong.")
+
+        return Response(
+
+            content=str(response),
+
+            media_type="application/xml"
+        )
 
 # -------- CALL API --------
 
