@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-# file: main.py
+# main.py
 
-from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import Response, HTMLResponse
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from twilio.rest import Client
 
@@ -16,6 +16,19 @@ from ai_agent import generate_reply
 load_dotenv()
 
 app = FastAPI()
+
+def _clean_base_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    return value.rstrip("/")
+
+
+BASE_URL = _clean_base_url(
+    os.getenv("BASE_URL")
+    or os.getenv("NGROK_URL")
+    or os.getenv("RENDER_EXTERNAL_URL")
+    or os.getenv("PUBLIC_URL")
+)
 
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
@@ -60,6 +73,113 @@ def home():
     return {"status": "AI voice agent running"}
 
 
+# -------- UI PAGE --------
+
+@app.get("/ui")
+def ui():
+
+    return HTMLResponse("""
+
+    <html>
+
+    <head>
+
+        <title>AI Call Agent</title>
+
+        <style>
+
+            body{
+                font-family: Arial;
+                background:#f5f5f5;
+                padding:40px;
+                text-align:center;
+            }
+
+            input{
+                padding:10px;
+                width:250px;
+                margin:10px;
+            }
+
+            button{
+                padding:10px 20px;
+                background:#4CAF50;
+                color:white;
+                border:none;
+                cursor:pointer;
+            }
+
+            button:hover{
+                background:#45a049;
+            }
+
+            .box{
+                background:white;
+                padding:30px;
+                border-radius:10px;
+                display:inline-block;
+                box-shadow:0 0 10px rgba(0,0,0,0.1);
+            }
+
+        </style>
+
+    </head>
+
+    <body>
+
+        <div class="box">
+
+            <h2>AI Voice Call Agent</h2>
+
+            <input id="phone" placeholder="+91xxxxxxxxxx"/>
+
+            <br>
+
+            <button onclick="makeCall()">Call Customer</button>
+
+            <p id="msg"></p>
+
+        </div>
+
+        <script>
+
+        async function makeCall(){
+
+            let phone = document.getElementById("phone").value;
+
+            let res = await fetch("/call",{
+
+                method:"POST",
+
+                headers:{
+
+                    "Content-Type":"application/json"
+
+                },
+
+                body:JSON.stringify({
+
+                    phone:phone
+
+                })
+
+            });
+
+            document.getElementById("msg").innerText="Calling...";
+
+        }
+
+        </script>
+
+    </body>
+
+    </html>
+
+    """)
+
+
+# -------- TWILIO VOICE --------
+
 @app.post("/voice")
 async def voice(request: Request):
 
@@ -91,6 +211,7 @@ What type of business do you run?
     save_log(user_input, ai_text)
 
     if interested:
+
         save_lead(phone, "YES")
 
     response = VoiceResponse()
@@ -106,6 +227,7 @@ What type of business do you run?
         speechTimeout="auto",
 
         timeout=5
+
     )
 
     gather.say(
@@ -113,6 +235,7 @@ What type of business do you run?
         ai_text,
 
         voice="Polly.Joanna-Neural"
+
     )
 
     response.append(gather)
@@ -125,8 +248,15 @@ What type of business do you run?
     )
 
 
+# -------- CALL API --------
+
 @app.post("/call")
 def make_call(data: dict):
+    if not BASE_URL:
+        raise HTTPException(
+            status_code=500,
+            detail="BASE_URL is not set. Set BASE_URL (or NGROK_URL / RENDER_EXTERNAL_URL) to your public server URL.",
+        )
 
     client = Client(
 
@@ -141,9 +271,12 @@ def make_call(data: dict):
 
         from_=TWILIO_PHONE_NUMBER,
 
-        url=data["ngrok_url"] + "/voice"
+        url=f"{BASE_URL}/voice"
+
     )
 
-    print("CALL SID:", call.sid)
+    return {
 
-    return {"status": "calling"}
+        "status": "calling"
+
+    }
